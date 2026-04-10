@@ -10,7 +10,7 @@ ENTRY=0,0
 EXIT=20,14
 
 # Is the maze perfect? (True for single path, False for loops)
-PERFECT=False
+PERFECT=TruE
 
 # Output filename for the hexadecimal grid
 OUTPUT_FILE=maze.txt

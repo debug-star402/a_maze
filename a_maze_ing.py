@@ -3,6 +3,8 @@ import os
 import random
 from mazegen import MazeGenerator, MazeSolver
 
+WALL_CHAR = '█'
+
 
 def parse_config(filepath: str) -> dict[str, str]:
     """Read the configuration file and return a dictionary of settings.
@@ -40,8 +42,6 @@ def parse_config(filepath: str) -> dict[str, str]:
 def open_border_wall(generator: MazeGenerator, x: int, y: int) -> None:
     """Open the appropriate border wall for an entry or exit cell.
 
-    Determines which wall to open based on the cell's position on the maze border.
-
     Args:
         generator: The MazeGenerator instance containing the grid.
         x: The x-coordinate of the cell.
@@ -61,63 +61,84 @@ def open_border_wall(generator: MazeGenerator, x: int, y: int) -> None:
 def render_terminal(generator: MazeGenerator, path_coords: list[tuple[int, int]],
                     show_path: bool, wall_color: str, entry_coord: tuple[int, int],
                     exit_coord: tuple[int, int]) -> None:
-    """Render the maze to the terminal using ASCII characters and ANSI color codes.
+    """Render the maze using Unicode block characters and ANSI colours.
+
+    Each cell is 3 characters wide and 1 character tall. Walls are solid
+    block characters coloured with ANSI escape codes.
 
     Args:
         generator: The MazeGenerator instance containing the grid to render.
         path_coords: List of (x, y) coordinates forming the solution path.
         show_path: Whether to display the solution path.
-        wall_color: Color name for maze walls ('white', 'red', 'green', 'blue').
+        wall_color: Colour name for maze walls ('white', 'red', 'green', 'blue').
         entry_coord: (x, y) tuple of the entry cell.
         exit_coord: (x, y) tuple of the exit cell.
     """
-    colors = {
-        'white': '\033[97m',
-        'red': '\033[91m',
-        'green': '\033[92m',
-        'blue': '\033[94m',
-        'reset': '\033[0m'
+    ansi: dict[str, str] = {
+        'white':   '\033[97m',
+        'red':     '\033[91m',
+        'green':   '\033[92m',
+        'blue':    '\033[94m',
+        'yellow':  '\033[93m',
+        'cyan':    '\033[96m',
+        'magenta': '\033[95m',
+        'reset':   '\033[0m',
     }
-    c_wall = colors.get(wall_color, colors['white'])
-    c_reset = colors['reset']
-    width, height = generator.width, generator.height
-    print(c_wall + "+" + "---+" * width + c_reset)
-    for y in range(height):
-        room_wall = c_wall + "|" + c_reset
-        for x in range(width):
-            char = " "
-            if (x, y) == entry_coord:
-                char = "\033[93mS\033[0m"
-            elif (x, y) == exit_coord:
-                char = "\033[93mE\033[0m"
-            elif show_path and (x, y) in path_coords:
-                char = "\033[96m.\033[0m"
-            elif generator.grid[y][x].is_42:
-                char = "\033[95mX\033[0m"
-            if generator.grid[y][x].walls['E']:
-                room_wall += f" {char} {c_wall}|{c_reset}"
-            else:
-                room_wall += f" {char}  "
-        print(room_wall)
-        room_floor = c_wall + "+" + c_reset
-        for x in range(width):
-            if generator.grid[y][x].walls['S']:
-                room_floor += c_wall + "---+" + c_reset
-            else:
-                room_floor += c_wall + "   +" + c_reset
-        print(room_floor)
+
+    c_wall  = ansi.get(wall_color, ansi['white'])
+    c_reset = ansi['reset']
+    W = generator.width
+    H = generator.height
+    path_set = set(path_coords)
+
+    def wall_block(count: int = 1) -> str:
+        return c_wall + WALL_CHAR * count + c_reset
+
+    def h_segment(cx: int, cy_cell: int, from_south: bool) -> str:
+        if from_south:
+            closed = generator.grid[cy_cell][cx].walls['S']
+        else:
+            closed = generator.grid[cy_cell][cx].walls['N']
+        return wall_block(3) if closed else '   '
+
+    def cell_content(cx: int, cy: int) -> str:
+        if (cx, cy) == entry_coord:
+            return ansi['yellow'] + ' S ' + c_reset
+        if (cx, cy) == exit_coord:
+            return ansi['red'] + ' E ' + c_reset
+        if show_path and (cx, cy) in path_set:
+            return ansi['cyan'] + ' \u00b7 ' + c_reset
+        if generator.grid[cy][cx].is_42:
+            return ansi['magenta'] + WALL_CHAR * 3 + c_reset
+        return '   '
+
+    for row in range(2 * H + 1):
+        line = ''
+        if row % 2 == 0:
+            cy = row // 2
+            line += wall_block()
+            for cx in range(W):
+                if cy < H:
+                    line += h_segment(cx, cy, from_south=False)
+                else:
+                    line += h_segment(cx, cy - 1, from_south=True)
+                line += wall_block()
+        else:
+            cy = row // 2
+            line += wall_block() if generator.grid[cy][0].walls['W'] else ' '
+            for cx in range(W):
+                line += cell_content(cx, cy)
+                line += wall_block() if generator.grid[cy][cx].walls['E'] else ' '
+        print(line)
 
 
 def interactive_menu(generator: MazeGenerator, solver: MazeSolver,
                      entry_coord: tuple[int, int], exit_coord: tuple[int, int]) -> None:
     """Launch the interactive terminal loop.
 
-    Provides options to re-generate the maze, toggle the solution path,
-    rotate wall colours, and quit.
-
     Args:
-        generator: The MazeGenerator instance used for maze generation and rendering.
-        solver: The MazeSolver instance used for path-finding.
+        generator: The MazeGenerator instance.
+        solver: The MazeSolver instance.
         entry_coord: (x, y) tuple of the maze entry cell.
         exit_coord: (x, y) tuple of the maze exit cell.
     """
@@ -126,7 +147,6 @@ def interactive_menu(generator: MazeGenerator, solver: MazeSolver,
     color_idx: int = 0
 
     def compute_path() -> list[tuple[int, int]]:
-        """Solve the maze and return a list of (x, y) path coordinates."""
         path_str = solver.solve(
             entry_coord[0], entry_coord[1],
             exit_coord[0], exit_coord[1]
@@ -163,10 +183,8 @@ def interactive_menu(generator: MazeGenerator, solver: MazeSolver,
         choice = input("Choice? (1-4): ").strip()
         if choice == '1':
             generator.generate()
-            # Re-open the border walls for entry and exit after fresh generation
             open_border_wall(generator, entry_coord[0], entry_coord[1])
             open_border_wall(generator, exit_coord[0], exit_coord[1])
-            # Sync the solver to the newly created grid
             solver.grid = generator.grid
             path_coords = compute_path()
         elif choice == '2':
@@ -179,11 +197,7 @@ def interactive_menu(generator: MazeGenerator, solver: MazeSolver,
 
 
 def main() -> None:
-    """Run the A-Maze-ing application.
-
-    Parses the configuration file, generates the maze, writes the output file,
-    then launches the interactive terminal display.
-    """
+    """Run the A-Maze-ing application."""
     if len(sys.argv) != 2:
         print("Usage: python3 a_maze_ing.py <config.txt>")
         sys.exit(1)
@@ -221,7 +235,6 @@ def main() -> None:
 
     maze = MazeGenerator(width, height, perfect, seed)
     maze.generate()
-
     open_border_wall(maze, entry_x, entry_y)
     open_border_wall(maze, exit_x, exit_y)
 
