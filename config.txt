@@ -1,0 +1,19 @@
+# A-Maze-ing Configuration File
+# The configuration file must contain one KEY=VALUE pair per line[cite: 119].
+# Lines starting with # are comments and must be ignored[cite: 120].
+
+WIDTH=21
+HEIGHT=15
+
+# Format is X,Y
+ENTRY=0,0
+EXIT=20,14
+
+# Is the maze perfect? (True for single path, False for loops)
+PERFECT=False
+
+# Output filename for the hexadecimal grid
+OUTPUT_FILE=maze.txt
+
+# Optional seed for reproducibility
+SEED=42

@@ -1,0 +1,4 @@
+# Development, Linting, and Build Tools
+flake8>=6.0.0
+mypy>=1.0.0
+build>=0.10.0
